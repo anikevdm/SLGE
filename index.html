@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Silver Lakes — Contact Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="layout">
+    <!-- LEFT: Map column -->
+    <section id="mapCard">
+      <div id="mapControls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">−</button>
+        <button id="zoomReset">Reset</button>
+      </div>
+
+      <div id="mapViewport" class="is-hidden">
+        <div id="mapContent">
+          <div id="scaled">
+          <img id="baseMap" src="SilverLakes.jpg" alt="Silver Lakes Map" />
+          <div id="pinsLayer" aria-hidden="true"></div>
+        </div>
+        </div>
+      </div>
+
+      <div id="legendBlock"></div>
+    </section>
+
+    <!-- RIGHT: Details sidebar -->
+    <aside id="sidebar">
+      <h2 id="panelTitle">Select a stand on the map</h2>
+      <div id="details"></div>
+
+      <div id="sidebarLogo">
+        <img src="logo.png" alt="Logo" />
+      </div>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

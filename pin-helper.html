@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pin Helper — quick X/Y% for your sheet</title>
+  <style>
+    :root { --bg:#0b0c10; --card:#111318; --muted:#d7dde5; --line:#2a2f3a; --accent:#7c5cff; }
+    * { box-sizing: border-box; }
+    html, body { height:100%; margin:0; font-family: system-ui, Arial, sans-serif; background: var(--bg); color: var(--muted); }
+    .wrap { height: 100%; display: grid; grid-template-columns: 1fr 360px; gap: 12px; padding: 12px; }
+
+    /* Left: viewport */
+    .viewport { position: relative; overflow: auto; background:#0f1117; border:1px solid var(--line); border-radius:12px; }
+    .content  { position: relative; width: max-content; height: max-content; }
+    .scaled   { position: relative; transform-origin: 0 0; }
+    #baseImg  { display:block; max-width:none; height:auto; }
+
+    /* Floating zoom controls (always visible on screen) */
+    .zoomBar { position: fixed; top: 10px; left: 10px; display:flex; gap:6px; z-index: 2000; }
+    .zoomBar button { padding:6px 10px; border:1px solid var(--line); background:#171923; color:#fff; border-radius:8px; cursor:pointer; }
+    .zoomBar button:hover { background:#1e2230; }
+
+    /* Crosshair */
+    .crosshair { position:absolute; left:0; top:0; pointer-events:none; display:none; }
+    .crosshair .h, .crosshair .v { position:absolute; background:rgba(255,255,255,.5); }
+    .crosshair .h { height:1px; width:100%; top:0; left:0; transform: translateY(-.5px); }
+    .crosshair .v { width:1px; height:100%; top:0; left:0; transform: translateX(-.5px); }
+
+    /* Pin preview */
+    .pin { position:absolute; width:16px; height:16px; transform:translate(-50%, -50%); border-radius:50%; display:grid; place-items:center; pointer-events:none; }
+    .pin .dot { width:10px; height:10px; border-radius:50%; border:1px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25); }
+
+    /* Right: sidebar */
+    .side { display:flex; flex-direction:column; gap:12px; border:1px solid var(--line); border-radius:12px; padding:12px; background: var(--card); }
+    .card { border:1px solid var(--line); border-radius:12px; padding:12px; background:#0f1117; }
+    .row { display:grid; grid-template-columns: 100px 1fr auto; gap:8px; align-items:center; }
+    .row label { color:#aab2bf; font-size:13px; }
+    input[type="text"], input[type="number"], textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#0b0d13; color:#e7ecf3; }
+    textarea { resize:vertical; min-height:80px; }
+    .btn { padding:8px 12px; border:1px solid var(--line); background:#171923; color:#fff; border-radius:8px; cursor:pointer; }
+    .btn:hover { background:#1e2230; }
+    .btn.primary { border-color: transparent; background: var(--accent); }
+    .muted { color:#98a2b3; font-size:12px; }
+
+    table { width:100%; border-collapse: collapse; margin-top:8px; font-size:14px; }
+    th, td { border-bottom:1px dashed #2a2f3a; padding:8px; text-align:left; }
+    th { color:#b7c0ce; font-weight:600; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .hint { font-size:12px; color:#9aa4b2; }
+    .kbd { padding:2px 6px; border:1px solid #3a3f4a; border-radius:6px; background:#141824; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Left: image area -->
+    <div class="viewport" id="viewport">
+      <div class="content" id="content">
+        <div class="scaled" id="scaled">
+          <!-- Use your exact base image used in the live app to guarantee alignment -->
+          <img id="baseImg" src="SilverLakes.jpg" alt="Base map" />
+          <div id="pinsLayer"></div>
+          <div class="crosshair" id="crosshair">
+            <div class="h"></div>
+            <div class="v"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: tools -->
+    <aside class="side">
+      <div class="card">
+        <div class="row" style="grid-template-columns: 140px 1fr auto;">
+          <label>Base image</label>
+          <input type="file" id="imgFile" accept="image/*" />
+          <button class="btn" id="useDefault">Use default</button>
+        </div>
+        <p class="hint" style="margin:6px 0 0 0;">Tip: use the same image as your main app so pins line up perfectly.</p>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label>Stand No.</label>
+          <input type="text" id="standNo" placeholder="e.g. 123" />
+          <span></span>
+        </div>
+        <div class="row">
+          <label>Address</label>
+          <input type="text" id="address" placeholder="e.g. 12 Silver Lakes Dr" />
+          <button class="btn" id="addRow">Add</button>
+        </div>
+        <div class="row">
+          <label>X (%)</label>
+          <input type="number" id="xPct" step="0.1" />
+          <button class="btn" id="copyCellX">Copy</button>
+        </div>
+        <div class="row">
+          <label>Y (%)</label>
+          <input type="number" id="yPct" step="0.1" />
+          <button class="btn" id="copyCellY">Copy</button>
+        </div>
+        <div class="actions" style="margin-top:8px;">
+          <button class="btn primary" id="copyRow">Copy CSV row</button>
+          <button class="btn" id="dropPin">Preview pin</button>
+          <button class="btn" id="clearPin">Clear preview</button>
+        </div>
+        <p class="hint" style="margin:6px 0 0 0;">Format copied: <code>Stand,Address,X,Y</code> (no % sign).</p>
+        <p class="hint">Keyboard: click map then press <span class="kbd">n</span> to add; <span class="kbd">c</span> to copy row.</p>
+      </div>
+
+      <div class="card">
+        <strong>Bulk address queue</strong>
+        <p class="hint">Paste one address per line, click <em>Start queue</em>, then click the map for each. We auto-advance.</p>
+        <textarea id="bulkList" placeholder="12 Silver Lakes Dr&#10;14 Silver Lakes Dr&#10;…"></textarea>
+        <div class="actions" style="margin-top:8px;">
+          <button class="btn" id="startQueue">Start queue</button>
+          <button class="btn" id="clearQueue">Clear</button>
+        </div>
+        <p class="muted" id="queueStatus">Queue: 0 items.</p>
+      </div>
+
+      <div class="card">
+        <strong>Collected rows</strong>
+        <div class="actions" style="margin:8px 0;">
+          <button class="btn" id="copyAll">Copy all CSV</button>
+          <button class="btn" id="downloadCsv">Download CSV</button>
+          <button class="btn" id="clearAll">Clear list</button>
+        </div>
+        <table id="tbl">
+          <thead><tr><th>#</th><th>Stand</th><th>Address</th><th>X</th><th>Y</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="hint">Header row: <code>Stand,Address,X,Y</code></p>
+      </div>
+
+      <div class="card">
+        <strong>How it works</strong>
+        <ol class="hint">
+          <li>Load the same base image as your main app (or keep default).</li>
+          <li>Fill in <em>Stand</em> and <em>Address</em> (or start a Bulk queue).</li>
+          <li>Click on the map — we compute image-relative percentages (0–100).</li>
+          <li>Press <em>Add</em> (or <span class="kbd">n</span>) and copy/download.</li>
+        </ol>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Fixed zoom controls -->
+  <div class="zoomBar">
+    <button id="zin">+</button>
+    <button id="zout">−</button>
+    <button id="zreset">Reset</button>
+  </div>
+
+<script>
+  // Natural size + zoom handling
+  let NAT_W = 0, NAT_H = 0, ZOOM = 1;
+
+  const viewport = document.getElementById('viewport');
+  const content  = document.getElementById('content');
+  const scaled   = document.getElementById('scaled');
+  const baseImg  = document.getElementById('baseImg');
+  const pinsLayer= document.getElementById('pinsLayer');
+  const crosshair= document.getElementById('crosshair');
+
+  function fitToViewport() {
+    if (!baseImg.naturalWidth) return;
+    NAT_W = baseImg.naturalWidth; NAT_H = baseImg.naturalHeight;
+    const scaleX = viewport.clientWidth  / NAT_W;
+    const scaleY = viewport.clientHeight / NAT_H;
+    ZOOM = Math.min(scaleX, scaleY);
+    applyZoom();
+  }
+  function applyZoom() {
+    content.style.width  = (NAT_W * ZOOM) + 'px';
+    content.style.height = (NAT_H * ZOOM) + 'px';
+    scaled.style.transform = `scale(${ZOOM})`;
+  }
+
+  document.getElementById('zin').onclick    = () => { ZOOM = Math.min(5, +(ZOOM*1.2).toFixed(3)); applyZoom(); };
+  document.getElementById('zout').onclick   = () => { ZOOM = Math.max(0.2, +(ZOOM/1.2).toFixed(3)); applyZoom(); };
+  document.getElementById('zreset').onclick = fitToViewport;
+
+  baseImg.addEventListener('load', fitToViewport);
+  if (baseImg.complete && baseImg.naturalWidth) fitToViewport();
+
+  // File picker for base image
+  document.getElementById('imgFile').addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const url = URL.createObjectURL(f);
+    baseImg.src = url;
+  });
+  document.getElementById('useDefault').addEventListener('click', () => {
+    baseImg.src = 'SilverLakes.jpg';
+  });
+
+  // ---- CLICK → 0..100%  (robust + clamped) ----
+  function clamp01(v){ return Math.min(1, Math.max(0, v)); }
+
+  function clientToPct(e){
+    // measure relative to the on-screen <img> box
+    const r = baseImg.getBoundingClientRect();
+    // if click is outside image box, bail
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+      return null;
+    }
+    const xRel = clamp01((e.clientX - r.left) / r.width);   // 0..1
+    const yRel = clamp01((e.clientY - r.top)  / r.height);  // 0..1
+    const xPct = xRel * 100;
+    const yPct = yRel * 100;
+    // natural-pixel for crosshair
+    const xInContent = xRel * NAT_W;
+    const yInContent = yRel * NAT_H;
+    return { xPct, yPct, xInContent, yInContent };
+  }
+
+  viewport.addEventListener('click', (e) => {
+    if (e.target.closest('.zoomBar')) return;
+    const res = clientToPct(e);
+    if (!res) { toast('Click on the image area'); return; }
+    const { xPct, yPct, xInContent, yInContent } = res;
+    setXY(xPct, yPct);
+    showCrosshair(xInContent, yInContent);
+  });
+
+  function showCrosshair(x, y){
+    crosshair.style.display = 'block';
+    crosshair.style.left = 0; crosshair.style.top = 0;
+    crosshair.style.width = (NAT_W)+'px';
+    crosshair.style.height= (NAT_H)+'px';
+    crosshair.querySelector('.h').style.top  = y + 'px';
+    crosshair.querySelector('.v').style.left = x + 'px';
+  }
+
+  // Form elements
+  const standEl   = document.getElementById('standNo');
+  const addressEl = document.getElementById('address');
+  const xEl = document.getElementById('xPct');
+  const yEl = document.getElementById('yPct');
+
+  function setXY(xPct, yPct){
+    xEl.value = xPct.toFixed(1);
+    yEl.value = yPct.toFixed(1);
+  }
+
+  // Pin preview
+  document.getElementById('dropPin').addEventListener('click', () => {
+    clearPreview();
+    const x = parseFloat(xEl.value), y = parseFloat(yEl.value);
+    if (!isFinite(x) || !isFinite(y)) return;
+    const p = makePin(x, y, '#7c5cff');
+    pinsLayer.appendChild(p);
+  });
+  document.getElementById('clearPin').addEventListener('click', clearPreview);
+  function clearPreview(){ pinsLayer.innerHTML = ''; }
+
+  function makePin(xPercent, yPercent, color){
+    const pin = document.createElement('div');
+    pin.className = 'pin';
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.background = color;
+    pin.appendChild(dot);
+    const left = (xPercent/100) * NAT_W;
+    const top  = (yPercent/100) * NAT_H;
+    pin.style.left = left + 'px';
+    pin.style.top  = top  + 'px';
+    return pin;
+  }
+
+  // Clipboard helpers
+  function copyText(t){
+    navigator.clipboard.writeText(t).then(()=>{ toast('Copied'); }).catch(()=>{});
+  }
+  function toast(msg){
+    const el = document.createElement('div');
+    el.textContent = msg;
+    el.style.position='fixed'; el.style.bottom='14px'; el.style.left='50%'; el.style.transform='translateX(-50%)';
+    el.style.background='rgba(0,0,0,.7)'; el.style.padding='8px 12px'; el.style.borderRadius='8px'; el.style.color='#fff'; el.style.fontSize='12px';
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(), 800);
+  }
+
+  document.getElementById('copyCellX').onclick = () => copyText(String(xEl.value||''));
+  document.getElementById('copyCellY').onclick = () => copyText(String(yEl.value||''));
+  document.getElementById('copyRow').onclick   = () => {
+    const row = [standEl.value.trim(), addressEl.value.trim(), xEl.value, yEl.value].join(',');
+    copyText(row);
+  };
+
+  // Table of collected rows
+  const tbody = document.querySelector('#tbl tbody');
+  const rows = [];
+
+  function renderTable(){
+    tbody.innerHTML = '';
+    rows.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(r.stand)}</td><td>${escapeHtml(r.addr)}</td><td>${r.x}</td><td>${r.y}</td>`;
+      const tdAct = document.createElement('td');
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Copy'; btn.onclick=()=>copyText(`${r.stand},${r.addr},${r.x},${r.y}`);
+      const del = document.createElement('button'); del.className='btn'; del.textContent='Del'; del.style.marginLeft='6px'; del.onclick=()=>{ rows.splice(i,1); renderTable(); };
+      tdAct.append(btn, del); tr.appendChild(tdAct); tbody.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  document.getElementById('addRow').addEventListener('click', addCurrentRow);
+  function addCurrentRow(){
+    const stand = standEl.value.trim();
+    const addr  = addressEl.value.trim();
+    const x = parseFloat(xEl.value), y = parseFloat(yEl.value);
+    if (!addr || !isFinite(x) || !isFinite(y)) { toast('Need Address, X, Y'); return; }
+    rows.push({ stand, addr, x: x.toFixed(1), y: y.toFixed(1) });
+    renderTable();
+    advanceQueue();
+  }
+
+  // Bulk queue (addresses only)
+  let queue = [];
+  const bulkTA = document.getElementById('bulkList');
+  const queueStatus = document.getElementById('queueStatus');
+
+  document.getElementById('startQueue').onclick = () => {
+    queue = bulkTA.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    if (!queue.length) { toast('No items'); return; }
+    addressEl.value = queue.shift();
+    updateQueueStatus();
+    toast('Queue started');
+    addressEl.focus();
+  };
+  document.getElementById('clearQueue').onclick = () => { queue = []; updateQueueStatus(); };
+  function updateQueueStatus(){ queueStatus.textContent = `Queue: ${queue.length} items.`; }
+  function advanceQueue(){
+    if (queue.length){ addressEl.value = queue.shift(); updateQueueStatus(); }
+  }
+
+  // Copy/download all
+  document.getElementById('copyAll').onclick = () => {
+    const csv = toCsv(rows);
+    copyText(csv);
+  };
+  document.getElementById('downloadCsv').onclick = () => {
+    const csv = toCsv(rows);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'pins.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+  document.getElementById('clearAll').onclick = () => { rows.splice(0, rows.length); renderTable(); };
+  function toCsv(rows){
+    let out = 'Stand,Address,X,Y\n';
+    rows.forEach(r => { out += `${r.stand},${r.addr},${r.x},${r.y}\n`; });
+    return out;
+  }
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'n') { addCurrentRow(); }
+    if (e.key === 'c') {
+      const row = [standEl.value.trim(), addressEl.value.trim(), xEl.value, yEl.value].join(',');
+      copyText(row);
+    }
+  });
+</script>
+</body>
+</html>

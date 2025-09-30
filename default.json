@@ -1,0 +1,33 @@
+{
+  "title": "Silver Lakes — Contact Tracker",
+  "sheetCsvUrl": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTE1emcFE-Vjz9Go5Nz2yxB13ibZJdyX4jp2JIW2K_s229fW-NdiALxu8WXn7ogkHdlHPWVwzsD-rBv/pub?gid=0&single=true&output=csv",
+
+  "idColumn": "Address",
+  "standIdColumn": "StandID",
+  "statusColumn": "ContactStatus", 
+
+
+  "statusColors": {
+    "not_contacted":        "#7f8c8d",
+    "callback_today":       "#2ecc71",  
+    "callback_week":        "#f39c12",  
+    "callback_3m":          "#9b59b6",  
+    "interested":           "#f1c40f",  
+    "no_answer_whatsapp":   "#3498db", 
+    "spoke_to_spouse":      "#16a085",  
+    "wrong_number":         "#e74c3c",
+    "not_interested":       "#000000"   
+  },
+
+  "statusAliases": {
+    "Not Yet Contacted":             "not_contacted",
+    "Call Back Today":               "callback_today",
+    "Call Back This Week":           "callback_week",
+    "Call Back in 3+ Months":        "callback_3m",
+    "Interested in Valuation":       "interested",
+    "No Answer - sent WhatsApp":     "no_answer_whatsapp",
+    "Spoke to Spouse":               "spoke_to_spouse",
+    "Wrong Number":                  "wrong_number",
+    "Not Interested":                "not_interested"
+  }
+}

@@ -1,0 +1,187 @@
+/* ---------- Base layout ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; }
+#layout {
+  display: flex;
+  height: 100vh;              /* full screen height */
+  overflow: hidden;           /* prevent page scrollbars */
+}
+
+:root { --sidebar-w: 370px; }  /* matches your sidebar’s fixed width */
+
+/* Hide the map viewport until it's fitted (prevents initial flicker) */
+#mapViewport.is-hidden { visibility: hidden; }
+
+/* ---------- Columns ---------- */
+#mapCard {
+  flex: 2;                    /* wider left column */
+  display: flex;              /* stack controls, viewport, legend */
+  flex-direction: column;
+  min-width: 0;               /* allow shrinking */
+  background: #fff;
+}
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--sidebar-w);                    
+  max-width: var(--sidebar-w);
+  border-left: 1px solid #ddd;
+  padding: 14px;
+  overflow: auto;             /* its own scroll */
+  background: #fff;
+}
+
+#details {
+  flex: 1;
+  line-height: 1.45;
+}
+
+#details > * + * {
+  margin-top: 10px;
+}
+
+/* If your details use a <ul> list for residents, make rows breathe */
+#details ul { margin: 8px 0 0; padding: 0; list-style: none; }
+#details li { padding: 10px 0; border-bottom: 1px solid #eee; }
+#details li:last-child { border-bottom: 0; }
+
+/* Optional: nice 2-column label/value layout if you add .kv rows later */
+#details .kv {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: start;
+}
+#details .kv .k { color:#555; font-weight:600; }
+
+#sidebarLogo {
+  text-align: center;
+  padding: 12px 0;
+  border-top: 1px solid #eee;
+}
+
+#sidebarLogo img {
+  max-width: 80%;
+  height: auto;
+  opacity: 0.9;
+}
+
+/* ---------- Map controls ---------- */
+#mapControls {
+  position: sticky;
+  top: 8px;
+  z-index: 10;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: transparent;
+}
+#mapControls button {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ---------- Pan/Zoom viewport ---------- */
+#mapViewport {
+  flex: 1;                    /* fill remaining height */
+  overflow: auto;             /* scrollbars for panning */
+  background: #f7f7f7;
+  border-bottom: 1px solid #eee;
+}
+
+/* Content that is scaled (zoomed) from top-left */
+#mapContent { position: relative;}
+
+#scaled { position: relative; transform-origin: 0 0; } 
+
+/* Base image renders at natural pixels; JS sizes mapContent to match */
+#baseMap { display: block; max-width: none; height: auto; }
+
+/* Pins layer sits over image inside mapContent */
+#pinsLayer { position: absolute; left: 0; top: 0; }
+
+/* ---------- Pins (tiny dots with larger invisible hit area) ---------- */
+/* Clickable container (invisible, ~18px) */
+.pin {
+  position: absolute;
+  width: 20px;                 /* big, easy target */
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  background: transparent;
+  display: grid;
+  place-items: center;         /* center the dot inside */
+}
+
+/* The visible tiny dot */
+.pin .dot {
+  width: 12px;                  /* your tiny visual size */
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #fff;      /* thin white edge for contrast */
+  transition: transform 120ms ease;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+}
+
+/* Feedback on hover: grow the dot, not the hit area */
+.pin:hover .dot {
+  transform: scale(1.9);
+}
+
+/* ---------- Legend (docked at bottom of map column) ---------- */
+#legendBlock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;                  /* stick to bottom of left column */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  border-top: 1px solid #eee;
+  background: #fff;
+  font-size: 13px;
+  z-index: 1000;
+}
+
+.legend-item { display: inline-flex; align-items: center; gap: 8px; }
+
+.legend-dot  {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+}
+
+/* Center content when smaller than the viewport */
+#mapViewport { display: grid; }               /* enables centering when needed */
+#mapViewport.centered { place-items: center; }/* center both axes */
+
+/* Sidebar gets a colored accent set via --status-color */
+#sidebar {
+  --status-color: #ddd;                  /* default when nothing selected */
+  border-left: 6px solid var(--status-color);
+  line-height: 1.5;
+}
+
+/* Small colored pill shown next to Status text */
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.status-pill {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.2);
+  flex: 0 0 12px;
+}
