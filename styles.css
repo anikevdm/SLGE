@@ -170,6 +170,18 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; }
   line-height: 1.5;
 }
 
+#addressPicker { 
+  margin-bottom: 10px; 
+  padding-bottom: 10px; 
+  border-bottom: 1px solid #eee; 
+}
+#addrSelect { width:100%; padding:6px 8px; font-size:14px; }
+
+#addrSelect option {
+  font-size: 14px;
+  line-height:1.4;
+}
+
 /* Small colored pill shown next to Status text */
 .status-line {
   display: flex;
