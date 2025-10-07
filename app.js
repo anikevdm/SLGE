@@ -88,32 +88,28 @@ function fitToViewport() {
 }
 
 // ===== Pin factory =====
-function makePin(xPercent, yPercent, color, address) {
+function makePin(xPercent, yPercent, color, address, primaryStatus, allStatuses = []) {
   const pin = document.createElement("div");
   pin.className = "pin";
+  pin.dataset.status = primaryStatus;
+  pin.dataset.statuses = (allStatuses || []).join(",");
+  pin.dataset.primaryStatus = primaryStatus;
 
-  // Visible tiny dot inside the larger hit box
   const dot = document.createElement("div");
   dot.className = "dot";
   dot.style.background = color;
   pin.appendChild(dot);
 
   pin.title = address;
-
-  pin.addEventListener("click", (e) => {
-    e.stopPropagation();
-    showDetails(address);
-  });
+  pin.addEventListener("click", (e) => { e.stopPropagation(); showDetails(address); });
 
   const baseMap = document.getElementById("baseMap");
-  if (!baseMap.complete) {
-    baseMap.addEventListener("load", () => positionPin(pin, baseMap, xPercent, yPercent));
-  } else {
-    positionPin(pin, baseMap, xPercent, yPercent);
-  }
+  if (!baseMap.complete) baseMap.addEventListener("load", () => positionPin(pin, baseMap, xPercent, yPercent));
+  else positionPin(pin, baseMap, xPercent, yPercent);
 
   return pin;
 }
+
 
 function positionPin(pin, baseMap, xPercent, yPercent) {
   // Record natural image size once
@@ -171,11 +167,7 @@ function showDetails(address) {
 
   // helpers local to this function (so they won't clash with anything else)
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const normalizeStatus = (raw) => {
-    if (!raw) return "not_contacted";
-    const alias = CFG.statusAliases?.[raw];
-    return alias || String(raw).toLowerCase().replace(/\s+/g, "_");
-  };
+
   const labelForStatus = (key) => {
     for (const [label, mapped] of Object.entries(CFG.statusAliases || {})) {
       if (mapped === key) return label;
@@ -200,7 +192,7 @@ function showDetails(address) {
   `;
 
   rows.forEach(r => {
-    const key     = normalizeStatus(r[CFG.statusColumn]);
+    const key     = normStatus(r[CFG.statusColumn]);
     const label   = labelForStatus(key);
     const bgColor = (CFG.statusColors && CFG.statusColors[key]) || "#999";
     const txt     = readableText(bgColor);
@@ -222,11 +214,7 @@ function showDetails(address) {
   detailsDiv.innerHTML = html;
 }
 
-
-// Choose the most urgent status from a list of rows
 function pickPriorityStatus(rows, cfg) {
-  const normalize = (raw) => (cfg.statusAliases?.[raw]) || String(raw || "").toLowerCase().replace(/\s+/g, "_");
-
   // Highest → lowest urgency (tweak anytime)
   const order = [
     "not_contacted",
@@ -244,7 +232,7 @@ function pickPriorityStatus(rows, cfg) {
   let best = "not_contacted";
   let bestRank = Infinity;
   rows.forEach(r => {
-    const s = normalize(r[cfg.statusColumn]);
+    const s = normStatus(r[cfg.statusColumn]);
     const rnk = rank[s] ?? 999;
     if (rnk < bestRank) { best = s; bestRank = rnk; }
   });
@@ -262,7 +250,8 @@ function renderLegend(cfg) {
   const block = document.getElementById("legendBlock");
   block.innerHTML = "";
 
-const entries = [
+  // Your order + labels; filtered to only those with a color in config
+  const entries = [
     { key: "not_contacted",        label: "Not Yet Contacted" },
     { key: "callback_today",       label: "Call Back Today" },
     { key: "callback_week",        label: "Call Back This Week" },
@@ -274,19 +263,41 @@ const entries = [
     { key: "not_interested",       label: "Not Interested"}
   ].filter(e => cfg.statusColors?.[e.key]);
 
-  entries.forEach(({key, label}) => {
-    if (!cfg.statusColors[key]) return;
+  entries.forEach(({ key, label }) => {
     const item = document.createElement("div");
     item.className = "legend-item";
+    item.dataset.status = key; // for filtering
+
     const dot = document.createElement("span");
     dot.className = "legend-dot";
     dot.style.background = cfg.statusColors[key];
+
     const text = document.createElement("span");
     text.textContent = label;
+
     item.append(dot, text);
     block.appendChild(item);
+
+    // Click to toggle filter (click again to clear)
+    item.addEventListener("click", () => {
+      ACTIVE_STATUS = (ACTIVE_STATUS === key) ? null : key;
+      applyFilter();
+    });
   });
-  adjustForLegend();
+
+   // Clear filter button (appended to the end)
+  const clearBtn = document.createElement("button");
+  clearBtn.id = "legendClear";
+  clearBtn.type = "button";
+  clearBtn.textContent = "Clear filter";
+  clearBtn.addEventListener("click", () => {
+    ACTIVE_STATUS = null;
+    applyFilter();
+  });
+  block.appendChild(clearBtn);
+
+  // keep your existing layout tweak if you have it
+  if (typeof adjustForLegend === "function") adjustForLegend();
 }
 
 function updateLayout() {
@@ -356,8 +367,7 @@ function populateUnplacedPicker() {
   items.forEach(({ addr, rows }) => {
     const firstRow = rows[0];
     const statusRaw = firstRow[CFG.statusColumn];
-    const norm = (CFG.statusAliases?.[statusRaw]) ||
-                 String(statusRaw || "").toLowerCase().replace(/\s+/g, "_");
+    const norm = normStatus(statusRaw);
     const color = CFG.statusColors[norm] || "#bbb";
 
     // Create a styled option with color dot
@@ -383,6 +393,62 @@ function wirePickerEvents() {
   });
 }
 
+// === Filtering state & helper ===
+let ACTIVE_STATUS = null;
+
+function applyFilter() {
+  const content = document.getElementById('mapContent');
+  const pins = document.querySelectorAll('#pinsLayer .pin');
+
+  if (!ACTIVE_STATUS) {
+    content.classList.remove('filtering');
+    pins.forEach(p =>  {
+      p.classList.remove('match');
+      const dot = p.querySelector('.dot');
+      const primary = p.dataset.primaryStatus;
+      if (dot && primary && CFG.statusColors[primary]) {
+        dot.style.background = CFG.statusColors[primary];
+      }
+    });
+
+  } else {
+    content.classList.add('filtering');
+    pins.forEach(p => {
+      const list = (p.dataset.statuses || "").split(",").filter(Boolean);
+      const isMatch = list.includes(ACTIVE_STATUS);
+      p.classList.toggle('match', isMatch);
+
+      const dot = p.querySelector('.dot');
+      if (!dot) return;
+      if (isMatch && CFG.statusColors[ACTIVE_STATUS]) {
+        dot.style.background = CFG.statusColors[ACTIVE_STATUS];
+      } else {
+        const primary = p.dataset.primaryStatus;
+        if (primary && CFG.statusColors[primary]) {
+          dot.style.background = CFG.statusColors[primary];
+        }
+      }
+    });
+  }
+
+  // reflect selection in the legend
+  document.querySelectorAll('#legendBlock .legend-item').forEach(li => {
+    li.classList.toggle('active', li.dataset.status === ACTIVE_STATUS);
+  });
+
+    // NEW: toggle Clear button
+  const clearBtn = document.getElementById('legendClear');
+  if (clearBtn) {
+    clearBtn.style.display = ACTIVE_STATUS ? 'inline-block' : 'none';
+  }
+}
+
+// --- Single source of truth: normalize a raw sheet status to a key
+function normStatus(raw) {
+  if (!raw) return "not_contacted";
+  const alias = CFG.statusAliases?.[raw];
+  return alias || String(raw).toLowerCase().replace(/\s+/g, "_");
+}
 
 // ===== Init =====
 (async function init() {
@@ -409,13 +475,6 @@ function wirePickerEvents() {
       (grouped[key] ||= []).push(r);
     });
 
-    // Helper: normalize status via aliases
-    const normalize = (raw) => {
-      if (!raw) return "not_contacted";
-      const alias = CFG.statusAliases?.[raw];
-      return alias || String(raw).toLowerCase().replace(/\s+/g, "_");
-    };
-
     // Place one pin per address
     let pinsCount = 0;
     Object.entries(grouped).forEach(([address, rows]) => {
@@ -423,12 +482,16 @@ function wirePickerEvents() {
       const y = parseFloat(rows[0].Y);
       if (!isFinite(x) || !isFinite(y)) return;
 
-      const status = pickPriorityStatus(rows, CFG);
-      const color  = CFG.statusColors[status] || "#999";
+      const primaryStatus = pickPriorityStatus(rows, CFG);
+      const primaryColor  = CFG.statusColors[primaryStatus] || "#999";
 
+      const allStatuses = Array.from(new Set(
+        rows.map(r => normStatus(r[CFG.statusColumn]))
+      )).filter(Boolean);
 
-      const pin = makePin(x, y, color, address);
+      const pin = makePin(x, y, primaryColor, address, primaryStatus, allStatuses);
       pinsLayer.appendChild(pin);
+
       pinsCount++;
     });
 
