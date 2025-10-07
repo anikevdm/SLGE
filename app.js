@@ -317,6 +317,73 @@ function updateLayout() {
   }
 }
 
+function listUnplacedAddresses() {
+  // group by Address
+  const byAddr = {};
+  DATA.forEach(r => {
+    const addr = String(r[CFG.idColumn] || "").trim();
+    if (!addr) return;
+    (byAddr[addr] ||= []).push(r);
+  });
+
+  // keep only addresses where NONE of the rows has valid X & Y
+  const items = Object.entries(byAddr).map(([addr, rows]) => {
+    const hasXY = rows.some(r => Number.isFinite(parseFloat(r.X)) &&
+                                 Number.isFinite(parseFloat(r.Y)));
+    return { addr, rows, hasXY };
+  }).filter(it => !it.hasXY);
+
+  // sort alphabetically
+  items.sort((a,b) => a.addr.localeCompare(b.addr));
+  return items;
+}
+
+function populateUnplacedPicker() {
+  const select = document.getElementById('addrSelect');
+  if (!select) return;
+
+  const items = listUnplacedAddresses();
+  const prev = select.value;
+
+  select.innerHTML = '';
+  const opt0 = document.createElement('option');
+  opt0.value = '';
+  opt0.textContent = items.length
+    ? `Select an address (${items.length})`
+    : 'All addresses are placed 🎉';
+  select.appendChild(opt0);
+
+  items.forEach(({ addr, rows }) => {
+    const firstRow = rows[0];
+    const statusRaw = firstRow[CFG.statusColumn];
+    const norm = (CFG.statusAliases?.[statusRaw]) ||
+                 String(statusRaw || "").toLowerCase().replace(/\s+/g, "_");
+    const color = CFG.statusColors[norm] || "#bbb";
+
+    // Create a styled option with color dot
+    const opt = document.createElement('option');
+    opt.value = addr;
+    opt.textContent = `  ● ${addr}`;
+    opt.style.color = color;
+    select.appendChild(opt);
+  });
+
+  // restore previous selection if still present
+  if ([...select.options].some(o => o.value === prev)) {
+    select.value = prev;
+  }
+}
+
+function wirePickerEvents() {
+  const select = document.getElementById('addrSelect');
+  if (!select) return;
+  select.addEventListener('change', () => {
+    const addr = select.value;
+    if (addr) showDetails(addr);
+  });
+}
+
+
 // ===== Init =====
 (async function init() {
   try {
@@ -376,6 +443,8 @@ function updateLayout() {
   } catch (err) {
     console.error(err);
   }
+  populateUnplacedPicker();
+  wirePickerEvents();
   fitToViewport();
 })();
 
